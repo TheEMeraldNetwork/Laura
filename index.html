@@ -1,0 +1,131 @@
+// Configurazione Firebase
+const firebaseConfig = {
+    // Inserisci qui la tua configurazione Firebase
+    // apiKey: "xxx",
+    // authDomain: "xxx",
+    // projectId: "xxx",
+    // storageBucket: "xxx",
+    // messagingSenderId: "xxx",
+    // appId: "xxx"
+};
+
+// Inizializza Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Dati iniziali
+const persone = ['Fedrigo', 'Capogrossi', 'Licordari'];
+let tableData = persone.map(name => ({
+    name,
+    status: '',
+    criticita: '',
+    nextSteps: ''
+}));
+
+// Funzione per generare il file calendario
+function generateOutlookFile() {
+    const person = document.getElementById('selectPerson').value;
+    const time = document.getElementById('selectTime').value;
+    
+    if (!person || !time) {
+        alert('Seleziona persona e orario');
+        return;
+    }
+
+    // Crea un file .ics per Outlook
+    const today = new Date();
+    const dateString = today.toISOString().split('T')[0];
+    const [hours, minutes] = time.split(':');
+    
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:${dateString.replace(/-/g, '')}T${hours}${minutes}00
+DTEND:${dateString.replace(/-/g, '')}T${parseInt(hours) + 1}${minutes}00
+SUMMARY:Allineamento d'area con ${person}
+DESCRIPTION:Incontro di allineamento d'area
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: 'text/calendar' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `allineamento-${person}-${dateString}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// Funzione per salvare i dati su Firebase
+async function saveToFirebase(data) {
+    try {
+        await db.collection('dashboard').doc('status').set({
+            tableData: data,
+            lastUpdate: new Date()
+        });
+    } catch (error) {
+        console.error("Errore nel salvataggio:", error);
+        alert('Errore nel salvataggio dei dati');
+    }
+}
+
+// Funzione per caricare i dati da Firebase
+async function loadFromFirebase() {
+    try {
+        const doc = await db.collection('dashboard').doc('status').get();
+        if (doc.exists) {
+            tableData = doc.data().tableData;
+            renderTable();
+        }
+    } catch (error) {
+        console.error("Errore nel caricamento:", error);
+    }
+}
+
+// Funzione per renderizzare la tabella
+function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    tbody.innerHTML = tableData.map((row, index) => `
+        <tr class="border-t">
+            <td class="px-6 py-4 text-sm text-gray-900 border">${row.name}</td>
+            <td class="px-6 py-4 border">
+                <textarea
+                    class="w-full p-2 border rounded text-sm"
+                    onchange="handleDataChange(${index}, 'status', this.value)"
+                >${row.status}</textarea>
+            </td>
+            <td class="px-6 py-4 border">
+                <textarea
+                    class="w-full p-2 border rounded text-sm"
+                    onchange="handleDataChange(${index}, 'criticita', this.value)"
+                >${row.criticita}</textarea>
+            </td>
+            <td class="px-6 py-4 border">
+                <textarea
+                    class="w-full p-2 border rounded text-sm"
+                    onchange="handleDataChange(${index}, 'nextSteps', this.value)"
+                >${row.nextSteps}</textarea>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Funzione per gestire i cambiamenti nei dati
+function handleDataChange(index, field, value) {
+    tableData[index][field] = value;
+    saveToFirebase(tableData);
+}
+
+// Inizializzazione
+document.addEventListener('DOMContentLoaded', () => {
+    // Inizializza le icone Lucide
+    lucide.createIcons();
+    
+    // Carica i dati iniziali
+    loadFromFirebase();
+    
+    // Aggiungi event listener per il bottone del calendario
+    document.getElementById('generateCalendar').addEventListener('click', generateOutlookFile);
+});
