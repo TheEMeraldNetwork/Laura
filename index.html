@@ -1,71 +1,183 @@
-// Configurazione iniziale
-const collaboratori = ['Fedrigo', 'Capogrossi', 'Licordari'];
-let tableData = Array(20).fill(null).map(() => ({
-    date: '',
-    collaboratore: '',
-    status: '',
-    criticita: '',
-    nextSteps: ''
-}));
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Laura</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <h1 class="text-3xl font-bold mb-8">Dashboard Laura</h1>
 
-// Inizializza date picker
-function initializeDatePicker() {
-    flatpickr("#dateSelector", {
-        dateFormat: "Y-m-d",
-        locale: "it",
-        altInput: true,
-        altFormat: "d/m/Y",
-        minDate: "today"
-    });
-}
-
-// Popolamento collaboratori
-function renderCollaboratori() {
-    const container = document.getElementById('collaboratoriList');
-    container.innerHTML = collaboratori.map(nome => `
-        <div class="p-4 border rounded-md bg-gray-50">
-            <span class="font-medium">${nome}</span>
+        <!-- Sezione Collaboratori -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Collaboratori</h2>
+            <div class="grid grid-cols-3 gap-4" id="collaboratori">
+                <div class="p-3 bg-gray-50 rounded border">Fedrigo</div>
+                <div class="p-3 bg-gray-50 rounded border">Capogrossi</div>
+                <div class="p-3 bg-gray-50 rounded border">Licordari</div>
+            </div>
         </div>
-    `).join('');
 
-    // Popola anche i dropdown
-    const selects = document.querySelectorAll('.collaboratore-select');
-    selects.forEach(select => {
-        select.innerHTML = `
-            <option value="">Seleziona collaboratore</option>
-            ${collaboratori.map(nome => `
-                <option value="${nome}">${nome}</option>
-            `).join('')}
-        `;
-    });
-}
+        <!-- Sezione Calendario -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Calendario Appuntamenti</h2>
+            <div class="grid gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input type="date" id="appointmentDate" class="p-2 border rounded">
+                    <select id="appointmentPerson" class="p-2 border rounded">
+                        <option value="">Seleziona Collaboratore</option>
+                        <option value="Fedrigo">Fedrigo</option>
+                        <option value="Capogrossi">Capogrossi</option>
+                        <option value="Licordari">Licordari</option>
+                    </select>
+                    <select id="appointmentTime" class="p-2 border rounded">
+                        <option value="">Seleziona Orario</option>
+                        <option value="09:00">09:00</option>
+                        <option value="10:00">10:00</option>
+                        <option value="11:00">11:00</option>
+                        <option value="14:00">14:00</option>
+                        <option value="15:00">15:00</option>
+                        <option value="16:00">16:00</option>
+                    </select>
+                </div>
+                <button id="createAppointment" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Genera Invito Outlook
+                </button>
+            </div>
+        </div>
 
-// Genera file .ics per Outlook
-function generateOutlookFile() {
-    const date = document.getElementById('dateSelector').value;
-    const person = document.getElementById('selectPerson').value;
-    const time = document.getElementById('selectTime').value;
-    
-    if (!date || !person || !time) {
-        alert('Seleziona data, persona e orario');
-        return;
-    }
+        <!-- Sezione Tabella -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Stato Attività</h2>
+            <div class="overflow-x-auto">
+                <table class="min-w-full border">
+                    <thead>
+                        <tr class="bg-gray-50">
+                            <th class="border p-3 text-left">Data</th>
+                            <th class="border p-3 text-left">Collaboratore</th>
+                            <th class="border p-3 text-left">Status</th>
+                            <th class="border p-3 text-left">Criticità</th>
+                            <th class="border p-3 text-left">Next Steps</th>
+                        </tr>
+                    </thead>
+                    <tbody id="activityTable">
+                        <!-- Righe generate da JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
-    const [hours, minutes] = time.split(':');
-    const dateObj = new Date(date);
-    const endDateObj = new Date(dateObj);
-    endDateObj.setHours(endDateObj.getHours() + 1);
+    <script type="module">
+        // Import Firebase
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getFirestore, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-    const formatDate = (date) => {
-        return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-    };
+        // Configurazione Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBHYrVVwfEms2Piall6RwyiksTRQXljQ6E",
+            authDomain: "calendario-laura.firebaseapp.com",
+            projectId: "calendario-laura",
+            storageBucket: "calendario-laura.firebasestorage.app",
+            messagingSenderId: "846042459543",
+            appId: "1:846042459543:web:99147880023a06950568d2"
+        };
 
-    const icsContent = `BEGIN:VCALENDAR
+        // Inizializza Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Genera righe tabella iniziali
+        const generateTableRows = () => {
+            const tbody = document.getElementById('activityTable');
+            let rows = '';
+            for(let i = 0; i < 20; i++) {
+                rows += `
+                    <tr>
+                        <td class="border p-3">
+                            <input type="date" class="w-full p-1 rounded" data-row="${i}" data-field="date">
+                        </td>
+                        <td class="border p-3">
+                            <select class="w-full p-1 rounded" data-row="${i}" data-field="collaboratore">
+                                <option value="">Seleziona</option>
+                                <option value="Fedrigo">Fedrigo</option>
+                                <option value="Capogrossi">Capogrossi</option>
+                                <option value="Licordari">Licordari</option>
+                            </select>
+                        </td>
+                        <td class="border p-3">
+                            <textarea class="w-full p-1 rounded" data-row="${i}" data-field="status"></textarea>
+                        </td>
+                        <td class="border p-3">
+                            <textarea class="w-full p-1 rounded" data-row="${i}" data-field="criticita"></textarea>
+                        </td>
+                        <td class="border p-3">
+                            <textarea class="w-full p-1 rounded" data-row="${i}" data-field="nextSteps"></textarea>
+                        </td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = rows;
+        };
+
+        // Salva su Firebase
+        const saveToFirebase = async (data) => {
+            try {
+                await setDoc(doc(db, 'activities', 'status'), {
+                    rows: data,
+                    lastUpdate: new Date().toISOString()
+                });
+            } catch (error) {
+                console.error('Errore nel salvataggio:', error);
+            }
+        };
+
+        // Carica da Firebase
+        const loadFromFirebase = async () => {
+            try {
+                const docRef = doc(db, 'activities', 'status');
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    return data.rows;
+                }
+                return null;
+            } catch (error) {
+                console.error('Errore nel caricamento:', error);
+                return null;
+            }
+        };
+
+        // Genera file ICS per Outlook
+        const generateICS = () => {
+            const date = document.getElementById('appointmentDate').value;
+            const person = document.getElementById('appointmentPerson').value;
+            const time = document.getElementById('appointmentTime').value;
+
+            if (!date || !person || !time) {
+                alert('Seleziona data, persona e orario');
+                return;
+            }
+
+            const [hours, minutes] = time.split(':');
+            const startDate = new Date(date);
+            startDate.setHours(parseInt(hours), parseInt(minutes), 0);
+            
+            const endDate = new Date(startDate);
+            endDate.setHours(startDate.getHours() + 1);
+
+            const formatDate = (date) => {
+                return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+            };
+
+            const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Dashboard Laura//IT
 BEGIN:VEVENT
-DTSTART:${formatDate(dateObj)}
-DTEND:${formatDate(endDateObj)}
+DTSTART:${formatDate(startDate)}
+DTEND:${formatDate(endDate)}
 SUMMARY:Allineamento d'area con ${person}
 DESCRIPTION:Incontro di allineamento d'area
 ORGANIZER;CN=Laura:mailto:laura@example.com
@@ -73,124 +185,65 @@ ATTENDEE;CN=${person}:mailto:${person.toLowerCase()}@example.com
 END:VEVENT
 END:VCALENDAR`;
 
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `allineamento-${person}-${date}.ics`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
-}
+            const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `allineamento-${person}-${date}.ics`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        };
 
-// Renderizza tabella
-function renderTable() {
-    const tbody = document.getElementById('tableBody');
-    tbody.innerHTML = tableData.map((row, index) => `
-        <tr class="border-t">
-            <td class="px-4 py-2 border">
-                <input type="text" 
-                    class="datepicker w-full p-1 border rounded"
-                    value="${row.date}"
-                    data-index="${index}"
-                    data-field="date">
-            </td>
-            <td class="px-4 py-2 border">
-                <select class="collaboratore-select w-full p-1 border rounded" 
-                    data-index="${index}" 
-                    data-field="collaboratore">
-                    <option value="">Seleziona</option>
-                    ${collaboratori.map(nome => `
-                        <option value="${nome}" ${row.collaboratore === nome ? 'selected' : ''}>
-                            ${nome}
-                        </option>
-                    `).join('')}
-                </select>
-            </td>
-            <td class="px-4 py-2 border">
-                <textarea class="w-full p-1 border rounded" 
-                    data-index="${index}" 
-                    data-field="status">${row.status}</textarea>
-            </td>
-            <td class="px-4 py-2 border">
-                <textarea class="w-full p-1 border rounded" 
-                    data-index="${index}" 
-                    data-field="criticita">${row.criticita}</textarea>
-            </td>
-            <td class="px-4 py-2 border">
-                <textarea class="w-full p-1 border rounded" 
-                    data-index="${index}" 
-                    data-field="nextSteps">${row.nextSteps}</textarea>
-            </td>
-        </tr>
-    `).join('');
+        // Gestione cambiamenti tabella
+        const handleTableChange = (event) => {
+            const row = event.target.dataset.row;
+            const field = event.target.dataset.field;
+            const value = event.target.value;
 
-    // Inizializza date picker per ogni input data
-    document.querySelectorAll('.datepicker').forEach(input => {
-        flatpickr(input, {
-            dateFormat: "Y-m-d",
-            locale: "it",
-            altFormat: "d/m/Y"
+            // Raccogli tutti i dati della tabella
+            const rows = [];
+            const inputs = document.querySelectorAll('#activityTable [data-row]');
+            inputs.forEach(input => {
+                const rowIndex = input.dataset.row;
+                const fieldName = input.dataset.field;
+                if (!rows[rowIndex]) {
+                    rows[rowIndex] = {};
+                }
+                rows[rowIndex][fieldName] = input.value;
+            });
+
+            // Salva su Firebase
+            saveToFirebase(rows);
+        };
+
+        // Inizializzazione
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Genera tabella
+            generateTableRows();
+
+            // Carica dati esistenti
+            const savedData = await loadFromFirebase();
+            if (savedData) {
+                savedData.forEach((rowData, index) => {
+                    if (rowData) {
+                        Object.entries(rowData).forEach(([field, value]) => {
+                            const element = document.querySelector(`[data-row="${index}"][data-field="${field}"]`);
+                            if (element) element.value = value;
+                        });
+                    }
+                });
+            }
+
+            // Event listener per il bottone calendario
+            document.getElementById('createAppointment').addEventListener('click', generateICS);
+
+            // Event listeners per la tabella
+            document.querySelectorAll('#activityTable [data-row]').forEach(element => {
+                element.addEventListener('change', handleTableChange);
+            });
         });
-    });
-
-    // Aggiungi event listeners per il salvataggio
-    tbody.querySelectorAll('textarea, select, input').forEach(element => {
-        element.addEventListener('change', handleDataChange);
-    });
-}
-
-// Gestione cambiamenti dati
-async function handleDataChange(event) {
-    const { index, field } = event.target.dataset;
-    const value = event.target.value;
-    
-    tableData[index][field] = value;
-    await saveToFirebase();
-}
-
-// Salvataggio su Firebase
-async function saveToFirebase() {
-    try {
-        await setDoc(doc(db, 'dashboard', 'status'), {
-            tableData,
-            lastUpdate: new Date().toISOString()
-        });
-    } catch (error) {
-        console.error("Errore nel salvataggio:", error);
-        alert('Errore nel salvataggio dei dati');
-    }
-}
-
-// Caricamento da Firebase
-async function loadFromFirebase() {
-    try {
-        const docRef = doc(db, 'dashboard', 'status');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            tableData = data.tableData;
-            renderTable();
-        }
-    } catch (error) {
-        console.error("Errore nel caricamento:", error);
-    }
-}
-
-// Inizializzazione
-document.addEventListener('DOMContentLoaded', () => {
-    // Inizializza icone
-    lucide.createIcons();
-    
-    // Inizializza date picker
-    initializeDatePicker();
-    
-    // Renderizza collaboratori
-    renderCollaboratori();
-    
-    // Carica dati da Firebase
-    loadFromFirebase();
-    
-    // Event listener per il calendario
-    document.getElementById('generateCalendar').addEventListener('click', generateOutlookFile);
-});
+    </script>
+</body>
+</html>
